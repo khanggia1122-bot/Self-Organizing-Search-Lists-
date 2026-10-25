@@ -21,31 +21,55 @@ void fillOneToFive(LinearList& list) {
     for (int k = 1; k <= 5; k++) list.insert(k);
 }
 
+void testHandTraceable() {
+    cout << "=== TEST 1: Small hand-traceable example (list 1 2 3 4 5; queries 4, 4, 5, 2) ===" << endl;
+    const int queries[4] = {4, 4, 5, 2};
+    StaticList s;
+    MoveToFrontList m;
+    TransposeList t;
+    LinearList* lists[3] = {&s, &m, &t};
+    int totals[3] = {0, 0, 0};
+    for (int i = 0; i < 3; i++) {
+        fillOneToFive(*lists[i]);
+        cout << "  " << lists[i]->name() << ": start [" << lists[i]->toString() << "]" << endl;
+        for (int j = 0; j < 4; j++) {
+            int c;
+            lists[i]->search(queries[j], c);
+            totals[i] += c;
+            cout << "    search " << queries[j] << ": " << c << " comparisons -> [" << lists[i]->toString() << "]" << endl;
+        }
+        cout << "    total = " << totals[i] << endl;
+    }
+    check(totals[0] == 15 && s.toString() == "1 2 3 4 5", "Static: total 15, list unchanged (matches hand trace)");
+    check(totals[1] == 14 && m.toString() == "2 5 4 1 3", "Move-To-Front: total 14, final list 2 5 4 1 3 (matches hand trace)");
+    check(totals[2] == 15 && t.toString() == "1 2 4 5 3", "Transpose: total 15, final list 1 2 4 5 3 (matches hand trace)");
+}
+
 void testEdgeCases() {
     cout << "=== TEST 2: Edge cases ===" << endl;
     {
-        StaticList l;
+        MoveToFrontList l;
         int c = -1;
         bool found = l.search(7, c);
         check(!found && c == 0 && l.size() == 0, "Empty list: search finds nothing with 0 comparisons");
         check(!l.remove(7), "Empty list: delete returns false");
     }
     {
-        StaticList l;
+        TransposeList l;
         l.insert(42);
         int c;
         check(l.search(42, c) && c == 1 && l.toString() == "42", "Single element: found with 1 comparison, list unchanged");
         check(l.remove(42) && l.size() == 0 && l.toString() == "", "Single element: delete empties the list");
     }
     {
-        StaticList l;
+        MoveToFrontList l;
         bool firstAccepted = l.insert(7);
         int extraAccepted = 0;
         for (int i = 0; i < 4; i++) if (l.insert(7)) extraAccepted++;
         check(firstAccepted && extraAccepted == 0 && l.size() == 1, "All-duplicate inserts: first is accepted, 4 repeats are rejected, size stays 1");
     }
     {
-        StaticList l;
+        TransposeList l;
         fillOneToFive(l);
         check(l.remove(1) && l.toString() == "2 3 4 5" && l.isLinkConsistent(), "Delete head keeps links consistent");
         check(l.remove(5) && l.toString() == "2 3 4" && l.isLinkConsistent(), "Delete tail keeps links consistent");
@@ -70,6 +94,8 @@ void testStaticBaseline() {
 }
 
 int main() {
+    testHandTraceable();
+    cout << endl;
     testEdgeCases();
     cout << endl;
     testStaticBaseline();

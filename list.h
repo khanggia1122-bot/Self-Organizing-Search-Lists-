@@ -135,4 +135,35 @@ public:
     string name() const { return "Static"; }
 };
 
+class MoveToFrontList : public LinearList {
+protected:
+    void onHit(Node* node) {
+        if (node == head) return;
+        unlink(node);
+        pushFront(node);
+    }
+public:
+    string name() const { return "MoveToFront"; }
+};
+
+class TransposeList : public LinearList {
+protected:
+    void onHit(Node* node) {
+        Node* p = node->prev;
+        if (p == 0) return;
+        Node* pp = p->prev;
+        Node* nn = node->next;
+        if (pp != 0) pp->next = node;
+        else head = node;
+        node->prev = pp;
+        node->next = p;
+        p->prev = node;
+        p->next = nn;
+        if (nn != 0) nn->prev = p;
+        else tail = p;
+    }
+public:
+    string name() const { return "Transpose"; }
+};
+
 #endif

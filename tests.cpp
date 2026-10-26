@@ -1,6 +1,8 @@
 #include <iostream>
 #include <string>
+#include <cmath>
 #include "list.h"
+#include "workload.h"
 
 using namespace std;
 
@@ -15,6 +17,10 @@ void check(bool condition, const string& name) {
         failed++;
         cout << "  [FAIL] " << name << endl;
     }
+}
+
+bool within(double actual, double expected, double percent) {
+    return fabs(actual - expected) <= expected * percent / 100.0;
 }
 
 void fillOneToFive(LinearList& list) {
@@ -80,6 +86,67 @@ void testEdgeCases() {
     }
 }
 
+void testLargeScale() {
+    cout << "=== TEST 3: Large-scale skewed workload (N=1000, 80% of queries hit 200 hot items) ===" << endl;
+    const int n = 1000;
+    const int hot = 200;
+    const int q = 400000;
+    Rng rng(20261015ULL);
+    int* order = new int[n];
+    int* queries = new int[q];
+    makeShuffledKeys(order, n, rng);
+    makeSkewedQueries(queries, q, n, hot, 80, rng);
+
+    StaticList s;
+    MoveToFrontList m;
+    TransposeList t;
+    LinearList* lists[3] = {&s, &m, &t};
+    double steady[3];
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < n; j++) lists[i]->insert(order[j]);
+        long long sum = 0;
+        for (int j = 0; j < q; j++) {
+            int c;
+            lists[i]->search(queries[j], c);
+            if (j >= q / 2) sum += c;
+        }
+        steady[i] = (double)sum / (q - q / 2);
+        cout << "  " << lists[i]->name() << ": last-half average = " << steady[i] << endl;
+    }
+    check(within(steady[0], (n + 1) / 2.0, 2.0), "Static matches (N+1)/2 within 2%");
+    check(steady[1] < 0.55 * steady[0], "Move-To-Front is much cheaper than Static on skewed input");
+    check(steady[2] < steady[0], "Transpose is cheaper than Static on skewed input");
+    check(s.size() == n && m.size() == n && t.size() == n && m.isLinkConsistent() && t.isLinkConsistent(),
+          "Lists keep all N keys and consistent links after 400,000 reorganizations");
+    delete[] order;
+    delete[] queries;
+}
+
+void testUniformNoBenefit() {
+    cout << "=== TEST 4: Uniform workload gives no advantage ===" << endl;
+    const int n = 500;
+    const int q = 100000;
+    Rng rng(99);
+    int* order = new int[n];
+    int* queries = new int[q];
+    makeShuffledKeys(order, n, rng);
+    makeUniformQueries(queries, q, n, rng);
+    StaticList s;
+    MoveToFrontList m;
+    TransposeList t;
+    LinearList* lists[3] = {&s, &m, &t};
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < n; j++) lists[i]->insert(order[j]);
+        for (int j = 0; j < q; j++) {
+            int c;
+            lists[i]->search(queries[j], c);
+        }
+        check(within(lists[i]->averageComparisons(), (n + 1) / 2.0, 3.0), lists[i]->name() + " stays near (N+1)/2 when there is no skew");
+    }
+    delete[] order;
+    delete[] queries;
+}
+
 void testStaticBaseline() {
     cout << "=== TEST 5: Static baseline counts comparisons and never reorders ===" << endl;
     StaticList l;
@@ -93,12 +160,56 @@ void testStaticBaseline() {
     check(l.averageComparisons() > 3.33 && l.averageComparisons() < 3.34, "Average comparisons per search = 10 / 3");
 }
 
+void testWorkloadGenerator() {
+    cout << "=== TEST 6: Workload generator ===" << endl;
+    const int n = 1000;
+    const int hot = 200;
+    const int q = 100000;
+    Rng rng(5);
+    int* keys = new int[n];
+    makeShuffledKeys(keys, n, rng);
+    int* seen = new int[n];
+    for (int i = 0; i < n; i++) seen[i] = 0;
+    bool inRange = true;
+    for (int i = 0; i < n; i++) {
+        if (keys[i] < 0 || keys[i] >= n) inRange = false;
+        else seen[keys[i]]++;
+    }
+    bool permutation = inRange;
+    for (int i = 0; i < n; i++) if (seen[i] != 1) permutation = false;
+    check(permutation, "Shuffled keys are a permutation of 0..N-1");
+    check(keys[0] != 0 || keys[1] != 1 || keys[2] != 2, "Shuffled keys are not left in sorted order");
+
+    int* queries = new int[q];
+    makeSkewedQueries(queries, q, n, hot, 80, rng);
+    int hotHits = 0;
+    bool valid = true;
+    for (int i = 0; i < q; i++) {
+        if (queries[i] < 0 || queries[i] >= n) valid = false;
+        if (queries[i] < hot) hotHits++;
+    }
+    check(valid, "Every generated query is a valid key");
+    check(within((double)hotHits / q * 100.0, 80.0, 1.5), "About 80% of queries hit the 200 hot keys");
+
+    Rng a(123), b(123);
+    check(a.next() == b.next() && a.next() == b.next(), "Same seed gives the same sequence");
+    delete[] keys;
+    delete[] seen;
+    delete[] queries;
+}
+
 int main() {
     testHandTraceable();
     cout << endl;
     testEdgeCases();
     cout << endl;
+    testLargeScale();
+    cout << endl;
+    testUniformNoBenefit();
+    cout << endl;
     testStaticBaseline();
+    cout << endl;
+    testWorkloadGenerator();
     cout << endl << "Result: " << passed << " passed, " << failed << " failed" << endl;
     return failed == 0 ? 0 : 1;
 }

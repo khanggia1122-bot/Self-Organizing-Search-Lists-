@@ -40,4 +40,8 @@ inline void makeUniformQueries(int* out, int count, int n, Rng& rng) {
     for (int i = 0; i < count; i++) out[i] = rng.nextInt(n);
 }
 
+inline void makeCyclicQueries(int* out, int count, const int* order, int n) {
+    for (int i = 0; i < count; i++) out[i] = order[i % n];
+}
+
 #endif

@@ -3,6 +3,7 @@
 #include <cmath>
 #include "list.h"
 #include "workload.h"
+#include "theory.h"
 
 using namespace std;
 
@@ -84,6 +85,30 @@ void testEdgeCases() {
         int c;
         check(!l.search(99, c) && c == 2, "Search for a missing key costs the full list length");
     }
+    {
+        const int n = 200;
+        Rng rng(7);
+        int* order = new int[n];
+        int* queries = new int[n * 20];
+        makeShuffledKeys(order, n, rng);
+        makeCyclicQueries(queries, n * 20, order, n);
+        StaticList s;
+        MoveToFrontList m;
+        TransposeList t;
+        LinearList* lists[3] = {&s, &m, &t};
+        for (int i = 0; i < 3; i++) {
+            for (int j = 0; j < n; j++) lists[i]->insert(order[j]);
+            for (int j = 0; j < n * 20; j++) {
+                int c;
+                lists[i]->search(queries[j], c);
+            }
+        }
+        check(within(s.averageComparisons(), (n + 1) / 2.0, 0.1), "Adversarial cyclic access: Static costs (N+1)/2 per search");
+        check(m.averageComparisons() > 1.8 * s.averageComparisons(), "Adversarial cyclic access: Move-To-Front is nearly twice as slow as Static");
+        check(within(t.averageComparisons(), s.averageComparisons(), 3.0), "Adversarial cyclic access: Transpose stays close to Static");
+        delete[] order;
+        delete[] queries;
+    }
 }
 
 void testLargeScale() {
@@ -113,7 +138,10 @@ void testLargeScale() {
         steady[i] = (double)sum / (q - q / 2);
         cout << "  " << lists[i]->name() << ": last-half average = " << steady[i] << endl;
     }
-    check(within(steady[0], (n + 1) / 2.0, 2.0), "Static matches (N+1)/2 within 2%");
+    double eStatic = theoryStaticRandomOrder(n);
+    double eMtf = theoryMoveToFront(n, hot, 80);
+    check(within(steady[0], eStatic, 2.0), "Static matches (N+1)/2 within 2%");
+    check(within(steady[1], eMtf, 2.0), "Move-To-Front matches the Rivest formula within 2%");
     check(steady[1] < 0.55 * steady[0], "Move-To-Front is much cheaper than Static on skewed input");
     check(steady[2] < steady[0], "Transpose is cheaper than Static on skewed input");
     check(s.size() == n && m.size() == n && t.size() == n && m.isLinkConsistent() && t.isLinkConsistent(),
